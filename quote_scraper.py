@@ -28,12 +28,14 @@ class ScrapeKeyword(object):
 
     def multi_scrape_quotes(self, page_number, results):
         """Scrape brainyquotes based on search result multithreaded"""
-        parameters = {"typ":"search", "langc":"en", "ab":"b", "pg":page_number, "id":self.keyword, "m":0}
-        response = requests.post(self.url, params=parameters) # Get all search results
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'lxml')
-        with self.lock:
-            results += soup.select('#quotesList a')
+        try:
+            parameters = {"typ":"search", "langc":"en", "ab":"b", "pg":page_number, "id":self.keyword, "m":0}
+            response = requests.post(self.url, params=parameters) # Get all search results
+            soup = BeautifulSoup(response.content, 'lxml')
+            with self.lock:
+                results += soup.select('#quotesList a')
+        except requests.exceptions.RequestException:
+            return
 
     def multi_scrape(self):
         """Multithreaded scrape implementation"""
@@ -55,7 +57,10 @@ def run_queue(que, all_dict, page_range):
 
 def scrape_all(scrape_list, page_range):
     """Scrape all contents in list"""
-    num_threads = len(scrape_list)
+    if len(scrape_list) < 20:
+        num_threads = len(scrape_list)
+    else:
+        num_threads = 20 #optimal number of threads
     que = Queue()
     all_results = {}
     for topic in scrape_list:
@@ -101,9 +106,10 @@ def validate_name(name):
     return True
 
 if __name__ == '__main__':
-    SCRAPE_ALL_TOPICS = ['Age', 'Alone', 'Amazing', 'Anger', 'Anniversary', 'Architecture', 'Art', 'Attitude', 'Beauty', 'Best', 'Birthday', 'Brainy', 'Business', 'Car', 'Chance', 'Change', 'Christmas', 'Communication', 'Computers', 'Cool', 'Courage', 'Dad', 'Dating', 'Death', 'Design', 'Diet', 'Dreams', 'Easter', 'Education', 'Environmental', 'Equality', 'Experience', 'Failure', 'Faith', 'Family', 'Famous', 'Father\'s Day', 'Fear', 'Finance', 'Fitness', 'Food', 'Forgiveness', 'Freedome', 'Friendship', 'Funny', 'Future', 'Gardening', 'God', 'Good', 'Government', 'Graduation', 'Great', 'Happiness', 'Health', 'History', 'Home', 'Hope', 'Humor', 'Imagination', 'Independence', 'Inspirational', 'Intelligence', 'Jealousy', 'Knowledge', 'Leadership', 'Learning', 'Legal', 'Life', 'Love', 'Marriage', 'Medical', 'Memorial Day', 'Men', 'Mom', 'Money', 'Morning', 'Mother\'s Day', 'Motivational', 'Movies', 'Moving On', 'Music', 'Nature', 'New Year\'s', 'Parenting', 'Patience', 'Patriotism', 'Peace', 'Pet', 'Poetry', 'Politics', 'Positive', 'Power', 'Relationship', 'Religion', 'Respect', 'Romantic', 'Sad', 'Saint Patrick\'s Day', 'Science', 'Smile', 'Society', 'Space', 'Sports', 'Strength', 'Success', 'Sympathy', 'Teacher', 'Technology', 'Teen', 'Thankful', 'Thanksgiving', 'Time', 'Travel', 'Trust', 'Truth', 'Valentine\'s Day', 'Veterans Day', 'War', 'Wedding', 'Wisdom', 'Women', 'Work']
+    SCRAPE_ALL_TOPICS = ['Age', 'Alone', 'Amazing', 'Anger', 'Anniversary', 'Architecture', 'Art', 'Attitude', 'Beauty', 'Best', 'Birthday', 'Brainy', 'Business', 'Car', 'Chance', 'Change', 'Christmas', 'Communication', 'Computers', 'Cool', 'Courage', 'Dad', 'Dating', 'Death', 'Design', 'Diet', 'Dreams', 'Easter', 'Education', 'Environmental', 'Equality', 'Experience', 'Failure', 'Faith', 'Family', 'Famous', 'Father\'s Day', 'Fear', 'Finance', 'Fitness', 'Food', 'Forgiveness', 'Freedom', 'Friendship', 'Funny', 'Future', 'Gardening', 'God', 'Good', 'Government', 'Graduation', 'Great', 'Happiness', 'Health', 'History', 'Home', 'Hope', 'Humor', 'Imagination', 'Independence', 'Inspirational', 'Intelligence', 'Jealousy', 'Knowledge', 'Leadership', 'Learning', 'Legal', 'Life', 'Love', 'Marriage', 'Medical', 'Memorial Day', 'Men', 'Mom', 'Money', 'Morning', 'Mother\'s Day', 'Motivational', 'Movies', 'Moving On', 'Music', 'Nature', 'New Year\'s', 'Parenting', 'Patience', 'Patriotism', 'Peace', 'Pet', 'Poetry', 'Politics', 'Positive', 'Power', 'Relationship', 'Religion', 'Respect', 'Romantic', 'Sad', 'Saint Patrick\'s Day', 'Science', 'Smile', 'Society', 'Space', 'Sports', 'Strength', 'Success', 'Sympathy', 'Teacher', 'Technology', 'Teen', 'Thankful', 'Thanksgiving', 'Time', 'Travel', 'Trust', 'Truth', 'Valentine\'s Day', 'Veterans Day', 'War', 'Wedding', 'Wisdom', 'Women', 'Work']
     FILENAME = sys.argv[1]
     START = time.time()
-    output_json(scrape_all(SCRAPE_ALL_TOPICS, 10), FILENAME) if validate_name(FILENAME) else sys.exit()
+    output_json(scrape_all(SCRAPE_ALL_TOPICS, 20), FILENAME) if validate_name(FILENAME) else sys.exit()
     END = time.time()
+    
     print('Time taken to scrape: {0:.2f} seconds'.format(END - START))
