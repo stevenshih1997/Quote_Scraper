@@ -2,12 +2,14 @@
 Multithreaded general purpose scraper for brainyquotes.com
 """
 import json
+import sys
 import threading
 import time
 from collections import defaultdict
 from queue import Queue
 import requests
 from bs4 import BeautifulSoup
+from progressbar import progress
 
 class ScrapeKeyword(object):
     """docstring for ScrapeKeyword"""
@@ -58,13 +60,13 @@ def scrape_all(scrape_list, page_range):
     all_results = {}
     for topic in scrape_list:
         que.put(topic)
-    for _ in range(num_threads):
+    for i in range(num_threads):
         worker = threading.Thread(target=run_queue, args=(que, all_results, page_range))
         worker.daemon = True
         worker.start()
         time.sleep(1)
+        progress(i, num_threads, status=' Scraping...')
     que.join()
-    print('Queue is now empty: ', que.empty())
     return all_results
 
 def format_quotes(quotes):
@@ -84,18 +86,24 @@ def format_quotes(quotes):
         result[key] = list(value)
     return dict(result)
 
-def output_json(input_quotes):
+def output_json(input_quotes, name):
     """outputs and prettifys quotes to json file"""
-    json.dump(input_quotes, open('./quotes.json', 'w'), indent=4, sort_keys=True)
-    print('File output succeeded')
+    filename = './' + name + '.json'
+    json.dump(input_quotes, open(filename, 'w'), indent=4, sort_keys=True)
+    print('\nQuotes outputted to ' + name + '.json')
+
+def validate_name(name):
+    """Return True if valid name, else return False"""
+    bad_chars = ['.', "\\", "/", "*", "?", '"', "<", ">", "|"]
+    if any(i in name for i in bad_chars):
+        print('Filename cannot contain these characters: ' + '[ ' + ', '.join(bad_chars) + ' ]')
+        return False
+    return True
 
 if __name__ == '__main__':
-    SCRAPE_LIST = ['Age', 'Alone', 'Amazing', 'Anger', 'Anniversary', 'Architecture', 'Art', 'Attitude', 'Beauty', 'Best', 'Birthday', 'Brainy', 'Business', 'Car', 'Chance', 'Change', 'Christmas', 'Communication', 'Computers', 'Cool', 'Courage', 'Dad', 'Dating', 'Death', 'Design', 'Diet', 'Dreams', 'Easter', 'Education', 'Environmental', 'Equality', 'Experience', 'Failure', 'Faith', 'Family', 'Famous', 'Father\'s Day', 'Fear', 'Finance', 'Fitness', 'Food']
-    # SCRAPE_OBJECT = ScrapeKeyword('Einstein', 30)
+    SCRAPE_ALL_TOPICS = ['Age', 'Alone', 'Amazing', 'Anger', 'Anniversary', 'Architecture', 'Art', 'Attitude', 'Beauty', 'Best', 'Birthday', 'Brainy', 'Business', 'Car', 'Chance', 'Change', 'Christmas', 'Communication', 'Computers', 'Cool', 'Courage', 'Dad', 'Dating', 'Death', 'Design', 'Diet', 'Dreams', 'Easter', 'Education', 'Environmental', 'Equality', 'Experience', 'Failure', 'Faith', 'Family', 'Famous', 'Father\'s Day', 'Fear', 'Finance', 'Fitness', 'Food', 'Forgiveness', 'Freedome', 'Friendship', 'Funny', 'Future', 'Gardening', 'God', 'Good', 'Government', 'Graduation', 'Great', 'Happiness', 'Health', 'History', 'Home', 'Hope', 'Humor', 'Imagination', 'Independence', 'Inspirational', 'Intelligence', 'Jealousy', 'Knowledge', 'Leadership', 'Learning', 'Legal', 'Life', 'Love', 'Marriage', 'Medical', 'Memorial Day', 'Men', 'Mom', 'Money', 'Morning', 'Mother\'s Day', 'Motivational', 'Movies', 'Moving On', 'Music', 'Nature', 'New Year\'s', 'Parenting', 'Patience', 'Patriotism', 'Peace', 'Pet', 'Poetry', 'Politics', 'Positive', 'Power', 'Relationship', 'Religion', 'Respect', 'Romantic', 'Sad', 'Saint Patrick\'s Day', 'Science', 'Smile', 'Society', 'Space', 'Sports', 'Strength', 'Success', 'Sympathy', 'Teacher', 'Technology', 'Teen', 'Thankful', 'Thanksgiving', 'Time', 'Travel', 'Trust', 'Truth', 'Valentine\'s Day', 'Veterans Day', 'War', 'Wedding', 'Wisdom', 'Women', 'Work']
+    FILENAME = sys.argv[1]
     START = time.time()
-    # HTML_RESPONSE = SCRAPE_OBJECT.multi_scrape()
-    # OBJECT = format_quotes(HTML_RESPONSE)
-    # output_json(OBJECT)
-    output_json(scrape_all(SCRAPE_LIST, 10))
+    output_json(scrape_all(SCRAPE_ALL_TOPICS, 10), FILENAME) if validate_name(FILENAME) else sys.exit()
     END = time.time()
-    print('Time it takes to scrape: ', END - START, 'seconds')
+    print('Time taken to scrape: {0:.2f} seconds'.format(END - START))
