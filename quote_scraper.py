@@ -10,6 +10,7 @@ from queue import Queue
 import requests
 from bs4 import BeautifulSoup
 from progressbar import progress
+import keywords
 
 class ScrapeKeyword(object):
     """docstring for ScrapeKeyword"""
@@ -19,7 +20,7 @@ class ScrapeKeyword(object):
         self.url = 'http://brainyquote.com/search_results.html?q={}'.format(keyword)
         self.lock = threading.Lock()
 
-    def first_scrape(self):
+    def scrape_first_page(self):
         """Initializes scraping and gets first url page based on search word"""
         response = requests.get(self.url)
         soup = BeautifulSoup(response.content, 'lxml')
@@ -39,8 +40,8 @@ class ScrapeKeyword(object):
 
     def multi_scrape(self):
         """Multithreaded scrape implementation"""
-        results = self.first_scrape()
-        threads = [threading.Thread(target=self.multi_scrape_quotes, args=(i, results, )) for i in range(2, self.num_pages + 1)]
+        results = self.scrape_first_page()
+        threads = [threading.Thread(target=self.multi_scrape_quotes, args=(page, results, )) for page in range(2, self.num_pages + 1)]
         for thread in threads:
             thread.start()
         for thread in threads:
@@ -51,8 +52,10 @@ def run_queue(que, all_dict, page_range):
     """Utilize Queue for multithreaded scraping"""
     while True:
         topic = que.get()
-        scrape_one_topic_object = ScrapeKeyword(topic, page_range)
-        all_dict[topic] = format_quotes(scrape_one_topic_object.multi_scrape())
+        if topic is None:
+            break
+        one_topic_obj = ScrapeKeyword(topic, page_range)
+        all_dict[topic] = format_quotes(one_topic_obj.multi_scrape())
         que.task_done()
 
 def scrape_all(scrape_list, page_range):
@@ -106,10 +109,10 @@ def validate_name(name):
     return True
 
 if __name__ == '__main__':
-    SCRAPE_ALL_TOPICS = ['Age', 'Alone', 'Amazing', 'Anger', 'Anniversary', 'Architecture', 'Art', 'Attitude', 'Beauty', 'Best', 'Birthday', 'Brainy', 'Business', 'Car', 'Chance', 'Change', 'Christmas', 'Communication', 'Computers', 'Cool', 'Courage', 'Dad', 'Dating', 'Death', 'Design', 'Diet', 'Dreams', 'Easter', 'Education', 'Environmental', 'Equality', 'Experience', 'Failure', 'Faith', 'Family', 'Famous', 'Father\'s Day', 'Fear', 'Finance', 'Fitness', 'Food', 'Forgiveness', 'Freedom', 'Friendship', 'Funny', 'Future', 'Gardening', 'God', 'Good', 'Government', 'Graduation', 'Great', 'Happiness', 'Health', 'History', 'Home', 'Hope', 'Humor', 'Imagination', 'Independence', 'Inspirational', 'Intelligence', 'Jealousy', 'Knowledge', 'Leadership', 'Learning', 'Legal', 'Life', 'Love', 'Marriage', 'Medical', 'Memorial Day', 'Men', 'Mom', 'Money', 'Morning', 'Mother\'s Day', 'Motivational', 'Movies', 'Moving On', 'Music', 'Nature', 'New Year\'s', 'Parenting', 'Patience', 'Patriotism', 'Peace', 'Pet', 'Poetry', 'Politics', 'Positive', 'Power', 'Relationship', 'Religion', 'Respect', 'Romantic', 'Sad', 'Saint Patrick\'s Day', 'Science', 'Smile', 'Society', 'Space', 'Sports', 'Strength', 'Success', 'Sympathy', 'Teacher', 'Technology', 'Teen', 'Thankful', 'Thanksgiving', 'Time', 'Travel', 'Trust', 'Truth', 'Valentine\'s Day', 'Veterans Day', 'War', 'Wedding', 'Wisdom', 'Women', 'Work']
+    ALL_TOPICS = keywords.AUTHORS
     FILENAME = sys.argv[1]
     START = time.time()
-    output_json(scrape_all(SCRAPE_ALL_TOPICS, 20), FILENAME) if validate_name(FILENAME) else sys.exit()
+    output_json(scrape_all(ALL_TOPICS, 20), FILENAME) if validate_name(FILENAME) else sys.exit()
     END = time.time()
     
     print('Time taken to scrape: {0:.2f} seconds'.format(END - START))
