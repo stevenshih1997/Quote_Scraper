@@ -1,16 +1,15 @@
 """
 Multithreaded general purpose scraper for brainyquotes.com
 """
-import json
 import sys
 import threading
 import time
 from collections import defaultdict
 from queue import Queue
 import requests
-from bs4 import BeautifulSoup
-from progressbar import progress
+from bs4 import BeautifulSoup, SoupStrainer
 import keywords
+import utils
 
 class ScrapeKeyword(object):
     """docstring for ScrapeKeyword"""
@@ -20,33 +19,56 @@ class ScrapeKeyword(object):
         self.url = 'http://brainyquote.com/search_results.html?q={}'.format(keyword)
         self.lock = threading.Lock()
 
-    def scrape_first_page(self):
+    def scrape_first_page(self, result):
         """Initializes scraping and gets first url page based on search word"""
         response = requests.get(self.url)
-        soup = BeautifulSoup(response.content, 'lxml')
-        quotes = soup.select('#quotesList a')
-        return quotes
+        parse_only = SoupStrainer(id='quotesList')
+        soup = BeautifulSoup(response.content, 'lxml', parse_only=parse_only)
+        result.append(soup) #soup.select('#quotesList a')
+        #return result
 
-    def multi_scrape_quotes(self, page_number, results):
+    def multi_scrape_quotes(self, results, params):
         """Scrape brainyquotes based on search result multithreaded"""
         try:
-            parameters = {"typ":"search", "langc":"en", "ab":"b", "pg":page_number, "id":self.keyword, "m":0}
-            response = requests.post(self.url, params=parameters) # Get all search results
-            soup = BeautifulSoup(response.content, 'lxml')
-            with self.lock:
-                results += soup.select('#quotesList a')
+            response = requests.post(self.url, params=params) # Get all search results
+            parse_only = SoupStrainer(id='quotesList')
+            soup = BeautifulSoup(response.content, 'lxml', parse_only=parse_only)
+            #with self.lock:
+            results.append(soup)#soup.select('#quotesList a')
         except requests.exceptions.RequestException:
             return
+    def run_queue_page(self, que, soup):
+        while True:
+            param = que.get()
+            self.multi_scrape_quotes(soup, param)
+            que.task_done()
 
     def multi_scrape(self):
         """Multithreaded scrape implementation"""
-        results = self.scrape_first_page()
-        threads = [threading.Thread(target=self.multi_scrape_quotes, args=(page, results, )) for page in range(2, self.num_pages + 1)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        results = []
+        self.scrape_first_page(results)
+        parameters = ({"typ":"search", "langc":"en", "ab":"b", "pg":page, "id":self.keyword, "m":0} for page in range(self.num_pages))
+        num_threads = 10
+        pg_que = Queue()
+        for param in parameters:
+            pg_que.put(param)
+        #threads = (threading.Thread(target=self.multi_scrape_quotes, args=(page, results, )) for page in range(2, self.num_pages + 1))
+        for _ in range(num_threads):
+            worker = threading.Thread(target=self.run_queue_page, args=(pg_que, results))
+            worker.start()
+            time.sleep(.1)
+        pg_que.join()
         return results
+
+def run_queue_author_quote(que, soup, page_range):
+    """Scrape author and quote only"""
+    while True:
+        topic = que.get()
+        if topic is None:
+            break
+        one_topic_obj = ScrapeKeyword(topic, page_range)
+        soup.extend(one_topic_obj.multi_scrape())
+        que.task_done()
 
 def run_queue(que, all_dict, page_range):
     """Utilize Queue for multithreaded scraping"""
@@ -65,17 +87,17 @@ def scrape_all(scrape_list, page_range):
     else:
         num_threads = 20 #optimal number of threads
     que = Queue()
-    all_results = {}
+    all_results = []
     for topic in scrape_list:
         que.put(topic)
-    for i in range(num_threads):
-        worker = threading.Thread(target=run_queue, args=(que, all_results, page_range))
+    for _ in range(num_threads):
+        worker = threading.Thread(target=run_queue_author_quote, args=(que, all_results, page_range))
         worker.daemon = True
         worker.start()
         time.sleep(1)
-        progress(i, num_threads, status=' Scraping...')
+        #progress(i, num_threads, status=' Scraping...')
     que.join()
-    return all_results
+    return format_quotes(all_results)
 
 def format_quotes(quotes):
     """Format quotes to a dict"""
@@ -83,36 +105,27 @@ def format_quotes(quotes):
     authors_list = []
     result = defaultdict(set)
     for quote in quotes:
-        if quote.get('title') == 'view quote':
-            quotes_list.append(quote.text)
-        if quote.get('title') == 'view author':
-            authors_list.append(quote.text)
+        for q in quote.find_all(title='view quote'):
+            quotes_list.append(q.text)
+        for q in quote.find_all(title='view author'):
+            authors_list.append(q.text)
+        # new_quote = quote.find_all('a')
+        # if new_quote.get('title') == 'view quote':
+        #     quotes_list.append(new_quote.text)
+        # if new_quote.get('title') == 'view author':
+        #     authors_list.append(new_quote.text)
     for author, quote in zip(authors_list, quotes_list):
         result[author].add(quote)
     result = dict(result)
     for key, value in result.items():
         result[key] = list(value)
-    return dict(result)
-
-def output_json(input_quotes, name):
-    """outputs and prettifys quotes to json file"""
-    filename = './' + name + '.json'
-    json.dump(input_quotes, open(filename, 'w'), indent=4, sort_keys=True)
-    print('\nQuotes outputted to ' + name + '.json')
-
-def validate_name(name):
-    """Return True if valid name, else return False"""
-    bad_chars = ['.', "\\", "/", "*", "?", '"', "<", ">", "|"]
-    if any(i in name for i in bad_chars):
-        print('Filename cannot contain these characters: ' + '[ ' + ', '.join(bad_chars) + ' ]')
-        return False
-    return True
+    return result
 
 if __name__ == '__main__':
-    ALL_TOPICS = keywords.AUTHORS
+    ALL_TOPICS = keywords.ALL_TOPICS
     FILENAME = sys.argv[1]
     START = time.time()
-    output_json(scrape_all(ALL_TOPICS, 20), FILENAME) if validate_name(FILENAME) else sys.exit()
+    utils.output_json(scrape_all(ALL_TOPICS, 20), FILENAME) if utils.validate_name(FILENAME) else sys.exit()
     END = time.time()
     
     print('Time taken to scrape: {0:.2f} seconds'.format(END - START))
