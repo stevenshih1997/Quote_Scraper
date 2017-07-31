@@ -10,7 +10,7 @@ import requests
 from bs4 import BeautifulSoup, SoupStrainer
 import keywords
 import utils
-
+import progressbar
 class ScrapeKeyword(object):
     """docstring for ScrapeKeyword"""
     def __init__(self, keyword, num_pages):
@@ -37,6 +37,7 @@ class ScrapeKeyword(object):
             results.append(soup)#soup.select('#quotesList a')
         except requests.exceptions.RequestException:
             return
+
     def run_queue_page(self, que, soup):
         while True:
             param = que.get()
@@ -48,7 +49,7 @@ class ScrapeKeyword(object):
         results = []
         self.scrape_first_page(results)
         parameters = ({"typ":"search", "langc":"en", "ab":"b", "pg":page, "id":self.keyword, "m":0} for page in range(self.num_pages))
-        num_threads = 10
+        num_threads = 8
         pg_que = Queue()
         for param in parameters:
             pg_que.put(param)
@@ -85,14 +86,14 @@ def scrape_all(scrape_list, page_range):
     if len(scrape_list) < 20:
         num_threads = len(scrape_list)
     else:
-        num_threads = 20 #optimal number of threads
+        num_threads = 15 #optimal number of threads
     que = Queue()
     all_results = []
     for topic in scrape_list:
         que.put(topic)
     for _ in range(num_threads):
         worker = threading.Thread(target=run_queue_author_quote, args=(que, all_results, page_range))
-        worker.daemon = True
+        #worker.daemon = True
         worker.start()
         time.sleep(1)
         #progress(i, num_threads, status=' Scraping...')
@@ -125,7 +126,9 @@ if __name__ == '__main__':
     ALL_TOPICS = keywords.ALL_TOPICS
     FILENAME = sys.argv[1]
     START = time.time()
+    spinner = progressbar.Spinner()
+    spinner.start()
     utils.output_json(scrape_all(ALL_TOPICS, 20), FILENAME) if utils.validate_name(FILENAME) else sys.exit()
     END = time.time()
-    
+    spinner.stop()
     print('Time taken to scrape: {0:.2f} seconds'.format(END - START))

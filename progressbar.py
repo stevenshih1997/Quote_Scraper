@@ -1,11 +1,35 @@
 """Progress bar module"""
 import sys
+import time
+import threading
 
-def progress(count, total, status=''):
-    """Display a progressbar for running long operations in command line"""
-    bar_len = 60
-    filled_len = int(round(bar_len * count / float(total)))
-    percents = round(100.0 * count / float(total), 1)
-    progress_bar = '#' * filled_len + '.' * (bar_len - filled_len)
-    sys.stdout.write('[%s] %s%s    %s\r' % (progress_bar, percents, '%', status))
-    sys.stdout.flush()
+class Spinner:
+    busy = False
+    delay = 0.1
+
+    @staticmethod
+    def spinning_cursor():
+        while 1: 
+            for cursor in '|/-\\': 
+                yield cursor
+
+    def __init__(self, delay=None):
+        self.spinner_generator = self.spinning_cursor()
+        if delay and float(delay): 
+            self.delay = delay
+
+    def spinner_task(self):
+        while self.busy:
+            sys.stdout.write(next(self.spinner_generator))
+            sys.stdout.flush()
+            time.sleep(self.delay)
+            sys.stdout.write('\b')
+            sys.stdout.flush()
+
+    def start(self):
+        self.busy = True
+        threading.Thread(target=self.spinner_task).start()
+
+    def stop(self):
+        self.busy = False
+        time.sleep(self.delay)
