@@ -1,19 +1,16 @@
 """
-Multithreaded general purpose scraper for brainyquotes.com. Ensure that there is a stable connection before attempting to scrape.
+Multithreaded general purpose scraper for brainyquotes.com.
+Ensure that there is a stable connection before attempting to scrape.
 """
-import sys
 import threading
 import time
 from collections import defaultdict
 from queue import Queue
-import requests
 from bs4 import BeautifulSoup, SoupStrainer
-import keywords
-import utils
-import progressbar
+import requests
 from requests.adapters import HTTPAdapter
 # Specify number of threads to scrape each page, and each topic
-NUM_THREADS = (5, 25) 
+NUM_THREADS = (5, 25)
 
 class ScrapeKeyword(object):
     """Scraper object which scrapes one keyword"""
@@ -95,7 +92,7 @@ def run_queue(que, all_dict, page_range, session):
 
 def scrape_all(scrape_list, page_range, flag_topic):
     """
-    Scrape all contents passed in @param scrape_list, specified in keywords.py 
+    Scrape all contents passed in @param scrape_list, specified in keywords.py
     """
     session = requests.Session()
     session.mount('http://', HTTPAdapter(max_retries=8))
@@ -133,29 +130,13 @@ def format_quotes(quotes_list):
     authors_list_result = []
     result = defaultdict(set)
     for quote in quotes_list:
-        for q in quote.find_all(title='view quote'):
-            quotes_list_result.append(q.text)
-        for q in quote.find_all(title='view author'):
-            authors_list_result.append(q.text)
+        for quote_tag in quote.find_all(title='view quote'):
+            quotes_list_result.append(quote_tag.text)
+        for quote_tag in quote.find_all(title='view author'):
+            authors_list_result.append(quote_tag.text)
     for author, quote in zip(authors_list_result, quotes_list_result):
         result[author].add(quote)
     result = dict(result)
     for key, value in result.items():
         result[key] = list(value)
     return result
-
-if __name__ == '__main__':
-    ALL_TOPICS = keywords.AUTHORS
-    FILENAME = sys.argv[1]
-    TOPIC_FLAG = sys.argv[2]
-
-    START = time.time()
-    SPINNER = progressbar.Spinner()
-    print('Scraping... ')
-    SPINNER.start()
-    utils.output_json(scrape_all(ALL_TOPICS, 20, TOPIC_FLAG), FILENAME) if utils.validate_name(FILENAME) else sys.exit()
-    SPINNER.stop()
-    END = time.time()
-    
-    print('Done!')
-    print('Time taken to scrape: {0:.2f} seconds'.format(END - START))
