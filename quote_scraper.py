@@ -1,5 +1,5 @@
 """
-Multithreaded general purpose scraper for brainyquotes.com
+Multithreaded general purpose scraper for brainyquotes.com. Ensure that there is a stable connection before attempting to scrape
 """
 import sys
 import threading
@@ -12,10 +12,11 @@ import keywords
 import utils
 import progressbar
 
-NUM_THREADS = (5, 25)
+# Specify number of threads to scrape each page, and each topic
+NUM_THREADS = (5, 25) 
 
 class ScrapeKeyword(object):
-    """docstring for ScrapeKeyword"""
+    """Scraper object which scrapes one keyword"""
     def __init__(self, keyword, num_pages):
         self.keyword = keyword
         self.num_pages = num_pages
@@ -32,7 +33,7 @@ class ScrapeKeyword(object):
             return
 
     def multi_scrape_quotes(self, results, params):
-        """Scrape brainyquotes based on search result multithreaded"""
+        """Scrapes a page of a keyword previously specified"""
         try:
             response = requests.post(self.url, params=params) # Get all search results
             parse_only = SoupStrainer(title=['view quote', 'view author'])
@@ -42,18 +43,21 @@ class ScrapeKeyword(object):
             return
 
     def run_queue_page(self, que, soup):
+        """ Multithreaded queue to scrape keyword"""
         while True:
             param = que.get()
+            # breaks out of main thread so threads can join
             if param is None:
                 break
             self.multi_scrape_quotes(soup, param)
             que.task_done()
 
     def multi_scrape(self):
-        """Multithreaded scrape implementation"""
+        """Multithreaded scrape implementation; uses queue to manage threads"""
         results = []
         num_threads = NUM_THREADS[0]
         self.scrape_first_page(results)
+        # parameters for post request is a generator
         parameters = ({"typ":"search", "langc":"en", "ab":"b", "pg":page, "id":self.keyword, "m":0} for page in range(self.num_pages))
         pg_que = Queue()
         for param in parameters:
@@ -67,9 +71,10 @@ class ScrapeKeyword(object):
         return results
 
 def run_queue_author_quote(que, soup, page_range):
-    """Scrape author and quote only"""
+    """Option to scrape author and quote only; has queue to manage threads"""
     while True:
         topic = que.get()
+        # breaks out of main thread so threads can join
         if topic is None:
             break
         one_topic_obj = ScrapeKeyword(topic, page_range)
@@ -77,9 +82,10 @@ def run_queue_author_quote(que, soup, page_range):
         que.task_done()
 
 def run_queue(que, all_dict, page_range):
-    """Utilize Queue for multithreaded scraping"""
+    """Option to organize in terms of keywords; has queue to manage threads"""
     while True:
         topic = que.get()
+        # breaks out of main thread so threads can join
         if topic is None:
             break
         one_topic_obj = ScrapeKeyword(topic, page_range)
@@ -87,7 +93,9 @@ def run_queue(que, all_dict, page_range):
         que.task_done()
 
 def scrape_all(scrape_list, page_range, flag_topic):
-    """Scrape all contents in list"""
+    """
+    Scrape all contents passed in @param scrape_list, specified in keywords.py 
+    """
     if len(scrape_list) < 20:
         num_threads = len(scrape_list)
     else:
@@ -95,6 +103,7 @@ def scrape_all(scrape_list, page_range, flag_topic):
     que = Queue()
     for topic in scrape_list:
         que.put(topic)
+    # if flag true: allows organizing by keywords or simply scrape author:quote
     if flag_topic:
         all_results = {}
         for _ in range(num_threads):
@@ -116,7 +125,7 @@ def scrape_all(scrape_list, page_range, flag_topic):
     return format_quotes(all_results)
 
 def format_quotes(quotes_list):
-    """Format quotes to a dict"""
+    """Format quotes to output in a json file"""
     quotes_list_result = []
     authors_list_result = []
     result = defaultdict(set)
@@ -133,7 +142,7 @@ def format_quotes(quotes_list):
     return result
 
 if __name__ == '__main__':
-    ALL_TOPICS = keywords.AUTHORS
+    ALL_TOPICS = keywords.ALL_TOPICS
     FILENAME = sys.argv[1]
     TOPIC_FLAG = sys.argv[2]
 

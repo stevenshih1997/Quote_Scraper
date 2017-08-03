@@ -2,7 +2,7 @@
 import json
 
 def output_json(input_quotes, name):
-    """outputs and prettifys quotes to json file"""
+    """Outputs and prettifys quotes to json file"""
     filename = './' + name + '.json'
     json.dump(input_quotes, open(filename, 'w'), indent=4, sort_keys=True)
     print('\nQuotes are in ' + name + '.json')
