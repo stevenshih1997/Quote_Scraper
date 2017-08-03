@@ -1,5 +1,5 @@
 """
-Multithreaded general purpose scraper for brainyquotes.com. Ensure that there is a stable connection before attempting to scrape
+Multithreaded general purpose scraper for brainyquotes.com. Ensure that there is a stable connection before attempting to scrape.
 """
 import sys
 import threading
@@ -22,10 +22,10 @@ class ScrapeKeyword(object):
         self.num_pages = num_pages
         self.url = 'http://brainyquote.com/search_results.html?q={}'.format(keyword)
 
-    def scrape_first_page(self, result):
+    def scrape_first_page(self, result, session):
         """Initializes scraping and gets first url page based on search word"""
         try:
-            response = requests.get(self.url)
+            response = session.get(self.url)
             parse_only = SoupStrainer(title=['view quote', 'view author'])
             soup = BeautifulSoup(response.content, 'lxml', parse_only=parse_only)
             result.append(soup)
@@ -39,7 +39,8 @@ class ScrapeKeyword(object):
             parse_only = SoupStrainer(title=['view quote', 'view author'])
             soup = BeautifulSoup(response.content, 'lxml', parse_only=parse_only)
             results.append(soup)
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as err:
+            print(err)
             return
 
     def run_queue_page(self, que, soup, session):
@@ -52,13 +53,11 @@ class ScrapeKeyword(object):
             self.multi_scrape_quotes(soup, param, session)
             que.task_done()
 
-    def multi_scrape(self):
+    def multi_scrape(self, session):
         """Multithreaded scrape implementation; uses queue to manage threads"""
         results = []
         num_threads = NUM_THREADS[0]
-        self.scrape_first_page(results)
-        session = requests.Session()
-        session.mount('http://', HTTPAdapter(max_retries=5))
+        self.scrape_first_page(results, session)
         # parameters for post request is a generator
         parameters = ({"typ":"search", "langc":"en", "ab":"b", "pg":page, "id":self.keyword, "m":0} for page in range(self.num_pages))
         pg_que = Queue()
@@ -72,7 +71,7 @@ class ScrapeKeyword(object):
         pg_que.join()
         return results
 
-def run_queue_author_quote(que, soup, page_range):
+def run_queue_author_quote(que, soup, page_range, session):
     """Option to scrape author and quote only; has queue to manage threads"""
     while True:
         topic = que.get()
@@ -80,10 +79,10 @@ def run_queue_author_quote(que, soup, page_range):
         if topic is None:
             break
         one_topic_obj = ScrapeKeyword(topic, page_range)
-        soup.extend(one_topic_obj.multi_scrape())
+        soup.extend(one_topic_obj.multi_scrape(session))
         que.task_done()
 
-def run_queue(que, all_dict, page_range):
+def run_queue(que, all_dict, page_range, session):
     """Option to organize in terms of keywords; has queue to manage threads"""
     while True:
         topic = que.get()
@@ -91,13 +90,15 @@ def run_queue(que, all_dict, page_range):
         if topic is None:
             break
         one_topic_obj = ScrapeKeyword(topic, page_range)
-        all_dict[topic] = format_quotes(one_topic_obj.multi_scrape())
+        all_dict[topic] = format_quotes(one_topic_obj.multi_scrape(session))
         que.task_done()
 
 def scrape_all(scrape_list, page_range, flag_topic):
     """
     Scrape all contents passed in @param scrape_list, specified in keywords.py 
     """
+    session = requests.Session()
+    session.mount('http://', HTTPAdapter(max_retries=8))
     if len(scrape_list) < 20:
         num_threads = len(scrape_list)
     else:
@@ -109,14 +110,14 @@ def scrape_all(scrape_list, page_range, flag_topic):
     if flag_topic:
         all_results = {}
         for _ in range(num_threads):
-            worker = threading.Thread(target=run_queue, args=(que, all_results, page_range))
+            worker = threading.Thread(target=run_queue, args=(que, all_results, page_range, session))
             worker.daemon = True
             worker.start()
             time.sleep(.5)
     else:
         all_results = []
         for _ in range(num_threads):
-            worker = threading.Thread(target=run_queue_author_quote, args=(que, all_results, page_range))
+            worker = threading.Thread(target=run_queue_author_quote, args=(que, all_results, page_range, session))
             worker.daemon = True
             worker.start()
             time.sleep(.5)
@@ -144,7 +145,7 @@ def format_quotes(quotes_list):
     return result
 
 if __name__ == '__main__':
-    ALL_TOPICS = keywords.ALL_TOPICS
+    ALL_TOPICS = keywords.AUTHORS
     FILENAME = sys.argv[1]
     TOPIC_FLAG = sys.argv[2]
 
