@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup, SoupStrainer
 import keywords
 import utils
 import progressbar
-
+from requests.adapters import HTTPAdapter
 # Specify number of threads to scrape each page, and each topic
 NUM_THREADS = (5, 25) 
 
@@ -32,24 +32,24 @@ class ScrapeKeyword(object):
         except requests.exceptions.RequestException:
             return
 
-    def multi_scrape_quotes(self, results, params):
+    def multi_scrape_quotes(self, results, params, session):
         """Scrapes a page of a keyword previously specified"""
         try:
-            response = requests.post(self.url, params=params) # Get all search results
+            response = session.post(self.url, params=params) # Get all search results
             parse_only = SoupStrainer(title=['view quote', 'view author'])
             soup = BeautifulSoup(response.content, 'lxml', parse_only=parse_only)
             results.append(soup)
         except requests.exceptions.RequestException:
             return
 
-    def run_queue_page(self, que, soup):
+    def run_queue_page(self, que, soup, session):
         """ Multithreaded queue to scrape keyword"""
         while True:
             param = que.get()
             # breaks out of main thread so threads can join
             if param is None:
                 break
-            self.multi_scrape_quotes(soup, param)
+            self.multi_scrape_quotes(soup, param, session)
             que.task_done()
 
     def multi_scrape(self):
@@ -57,13 +57,15 @@ class ScrapeKeyword(object):
         results = []
         num_threads = NUM_THREADS[0]
         self.scrape_first_page(results)
+        session = requests.Session()
+        session.mount('http://', HTTPAdapter(max_retries=5))
         # parameters for post request is a generator
         parameters = ({"typ":"search", "langc":"en", "ab":"b", "pg":page, "id":self.keyword, "m":0} for page in range(self.num_pages))
         pg_que = Queue()
         for param in parameters:
             pg_que.put(param)
         for _ in range(num_threads):
-            worker = threading.Thread(target=self.run_queue_page, args=(pg_que, results))
+            worker = threading.Thread(target=self.run_queue_page, args=(pg_que, results, session))
             worker.daemon = True
             worker.start()
             time.sleep(.1)
