@@ -4,7 +4,7 @@ import sys
 import json
 import progressbar
 import keywords
-from quote_scraper import scrape_all
+from quote_scraper import ScrapeKeyword
 
 def output_json(input_quotes, name):
     """Outputs and prettifys quotes to json file"""
@@ -24,14 +24,14 @@ def main():
     """Main function to run the program; called in main.py"""
     file = sys.argv[1]
     list_to_scrape = sys.argv[2]
-    flag = sys.argv[2]
+    flag = int(sys.argv[3])
     to_scrape = getattr(keywords, list_to_scrape)
     spinner = progressbar.Spinner()
     start = time.time()
     print('Scraping... ')
     spinner.start()
     if validate_name(file):
-        output_json(scrape_all(to_scrape, 20, flag), file)
+        output_json(ScrapeKeyword.scrape_all(to_scrape, 20, flag), file)
     else:
         sys.exit()
     spinner.stop()
