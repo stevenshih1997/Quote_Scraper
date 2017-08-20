@@ -31,7 +31,7 @@ def main():
     print('Scraping... ')
     spinner.start()
     if validate_name(file):
-        output_json(ScrapeKeyword.scrape_all(to_scrape, 20, flag), file)
+        output_json(input_quotes=ScrapeKeyword.scrape_all(scrape_list=to_scrape, page_range=20, flag_topic=flag), name=file)
     else:
         sys.exit()
     spinner.stop()
