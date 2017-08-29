@@ -9,6 +9,7 @@ from queue import Queue
 from bs4 import BeautifulSoup, SoupStrainer
 import requests
 from requests.adapters import HTTPAdapter
+import sql_db
 # Specify number of threads to scrape each page, and each topic
 NUM_THREADS = (5, 25)
 
@@ -124,7 +125,9 @@ class ScrapeKeyword(object):
         que.join()
         if flag_topic:
             return all_results
-        return ScrapeKeyword.format_quotes(all_results)
+        conn = sql_db.connect_db()
+        sql_db.create_db(conn)
+        return ScrapeKeyword.format_sql(conn, all_results)
 
     @staticmethod
     def format_quotes(quotes_list):
@@ -142,4 +145,25 @@ class ScrapeKeyword(object):
         result = dict(result)
         for key, value in result.items():
             result[key] = list(value)
+        return result
+
+    @staticmethod
+    def format_sql(conn, quotes_list):
+        """Format quotes for output to SQL database"""
+        quotes_list_result = []
+        authors_list_result = []
+        result = defaultdict(set)
+        for quote in quotes_list:
+            for quote_tag in quote.find_all(title='view quote'):
+                quotes_list_result.append(quote_tag.text)
+            for quote_tag in quote.find_all(title='view author'):
+                authors_list_result.append(quote_tag.text)
+        for quote, author in zip(quotes_list_result, authors_list_result):
+            result[quote].add(author)
+        result = dict(result)
+        for key, value in result.items():
+            result[key] = ''.join(list(value))
+            sql_item = (key, ''.join(list(value)))
+            sql_db.insert_db(conn, sql_item)
+        sql_db.commit_changes(conn)
         return result
